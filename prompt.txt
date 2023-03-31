@@ -1,0 +1,56 @@
+local lib = {}
+local key = file.read( "keya.txt" )
+
+local function escapeChar( c )
+    return string.format( "\\u%04x", c:byte() )
+end
+
+local function jsonSafeString( str )
+    local safeStr = str:gsub( "\\", "\\\\" )
+    safeStr = safeStr:gsub( '"', '\\"' )
+    safeStr = safeStr:gsub( "\n", "\\n" )
+    safeStr = safeStr:gsub( "\r", "\\r" )
+    safeStr = safeStr:gsub( "\t", "\\t" )
+    safeStr = safeStr:gsub( "\b", "\\b" )
+    safeStr = safeStr:gsub( "\f", "\\f" )
+    safeStr = safeStr:gsub( "[%c]", escapeChar )
+    
+    return safeStr
+end
+
+function lib.prompt( prompt, temp, callback )
+    local time = timer.realtime()
+    local fixedPrompt = jsonSafeString( prompt )
+    print( fixedPrompt )
+    local requestData = {
+        model = "gpt-3.5-turbo",
+        messages = {
+            {
+                role = "user",
+                content = fixedPrompt
+            }
+        },
+        temperature = temp
+    }
+    local strData = json.encode( requestData )
+    http.post(
+        "https://api.openai.com/v1/chat/completions",
+        strData,
+        function( body )
+            local data = json.decode( body )
+            local response = data.choices[1].message.content
+            local tokens = data.usage.total_tokens
+            local time = math.round( timer.realtime() - time, 2 )
+            callback( response, tokens, time, data )
+        end,
+        function( body )
+            print( "timeout" )
+        end,
+        {
+            ["Authorization"] = key,
+            ["Content-Type"] = "application/json"
+        }
+    )
+end
+
+return lib
